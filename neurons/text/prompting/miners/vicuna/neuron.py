@@ -16,48 +16,38 @@
 # DEALINGS IN THE SOFTWARE.
 
 import torch
-import argparse
 import bittensor
 from typing import List, Dict
 from transformers import AutoTokenizer, AutoModelForCausalLM
-
+from config import neuron_config
 class VicunaMiner( bittensor.BasePromptingMiner ):
 
     @classmethod
     def check_config( cls, config: 'bittensor.Config' ):
         pass
 
-    @classmethod
-    def add_args( cls, parser: argparse.ArgumentParser ):
-        parser.add_argument( '--vicuna.model_name', type=str, required=True, help='Name/path of model to load' )
-        parser.add_argument( '--vicuna.device', type=str, help='Device to load model', default="cuda" )
-        parser.add_argument( '--vicuna.max_new_tokens', type=int, help='Max tokens for model output.', default=256 )
-        parser.add_argument( '--vicuna.temperature', type=float, help='Sampling temperature of model', default=0.5 )
-        parser.add_argument( '--vicuna.do_sample', action='store_true', default=False, help='Whether to use sampling or not (if not, uses greedy decoding).' )
-        parser.add_argument( '--vicuna.do_prompt_injection', action='store_true', default=False, help='Whether to use a custom "system" prompt instead of the one sent by bittensor.' )
-        parser.add_argument( '--vicuna.system_prompt', type=str, help='What prompt to replace the system prompt with', default= "A chat between a curious user and an artificial intelligence assistant.\nThe assistant gives helpful, detailed, and polite answers to the user's questions. " )
 
     def __init__( self ):
         super( VicunaMiner, self ).__init__()
         print ( self.config )
 
-        bittensor.logging.info( 'Loading ' + str(self.config.vicuna.model_name))
-        self.tokenizer = AutoTokenizer.from_pretrained( self.config.vicuna.model_name, use_fast=False )
-        self.model = AutoModelForCausalLM.from_pretrained( self.config.vicuna.model_name, torch_dtype = torch.float16, low_cpu_mem_usage=True )
+        bittensor.logging.info( 'Loading ' + str(neuron_config["model_name"]))
+        self.tokenizer = AutoTokenizer.from_pretrained( neuron_config["model_name"], use_fast=False )
+        self.model = AutoModelForCausalLM.from_pretrained( neuron_config["model_name"], torch_dtype = torch.float16, low_cpu_mem_usage=True )
         bittensor.logging.info( 'Model loaded!' )
 
-        if self.config.vicuna.device != "cpu":
-            self.model = self.model.to( self.config.vicuna.device )
+        if neuron_config["device"] != "cpu":
+            self.model = self.model.to( neuron_config["device"] )
 
     def _process_history(self, history: List[str]) -> str:
         processed_history = ''
 
-        if self.config.vicuna.do_prompt_injection:
-            processed_history += self.config.vicuna.system_prompt
+        if neuron_config["do_prompt_injection"]:
+            processed_history += neuron_config["system_prompt"]
 
         for message in history:
             if message['role'] == 'system':
-                if not self.config.vicuna.do_prompt_injection or message != history[0]:
+                if not neuron_config["do_prompt_injection"] or message != history[0]:
                     processed_history += '' + message['content'].strip() + ' '
 
             if message['role'] == 'Assistant':
@@ -71,13 +61,13 @@ class VicunaMiner( bittensor.BasePromptingMiner ):
         history = self._process_history(messages)
         prompt = history + "ASSISTANT:"
 
-        input_ids = self.tokenizer.encode(prompt, return_tensors="pt").to(self.config.vicuna.device)
+        input_ids = self.tokenizer.encode(prompt, return_tensors="pt").to(neuron_config["device"])
 
         output = self.model.generate(
             input_ids,
-            max_length=input_ids.shape[1] + self.config.vicuna.max_new_tokens,
-            temperature=self.config.vicuna.temperature,
-            do_sample=self.config.vicuna.do_sample,
+            max_length=input_ids.shape[1] + neuron_config["max_new_tokens"],
+            temperature=neuron_config["temperature"],
+            do_sample=neuron_config["do_sample"],
             pad_token_id=self.tokenizer.eos_token_id,
         )
 
